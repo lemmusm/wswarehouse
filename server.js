@@ -1,7 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const router = require('./routes/router');
 
 require('dotenv').config();
 
@@ -17,8 +16,13 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // use cors
 app.use(cors({ origin: true, credentials: true }));
 
-// router
-app.use('/api/v1/', router);
+// simple route
+app.get('/', (req, res) => {
+  res.json({ message: 'Welcome to REST API application.' });
+});
+
+//routes
+require('./app/routes/entry.routes')(app);
 
 // set port, listen for request
 app.listen(port, () => {
