@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
 
 //routes
 require('./app/routes/entry.routes')(app);
+require('./app/routes/sale.routes')(app);
 
 // set port, listen for request
 app.listen(port, () => {
