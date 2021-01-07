@@ -19,52 +19,55 @@ const Sale = function (sale) {
     Into the last query run commit.
 
     Execute INSERT queries to sale and sale_detail tables and with a trigger in database update the stock.
+
+    First insert data in sale table, iterate newSaleDetail object and create sale_detail object, and add sale_id
+    to each element iterated and then iterate sale_detail object to execute insert query with each element to insert
+    data in sale_detail table
 */
 Sale.create = (newSale, newSaleDetail, result) => {
   sql.beginTransaction((transactionError) => {
     if (transactionError) result(null, { error: transactionError });
 
     // insert entry
-    sql.query('INSERT INTO sale SET ?', newSale, (errSale, resSale) => {
+    sql.query('INSERT IGNORE INTO sale SET ?', newSale, (errSale, resSale) => {
       if (errSale) {
         return sql.rollback(() => {
           result(null, { error: errSale });
         });
       }
 
-      // create sale detail object
-      const sale_detail = {
-        ...newSaleDetail,
-        sale_id: resSale.insertId,
-      };
+      // Iterate newSaleDetail object and create sale_detail object, and add sale_id to each element iterated
+      const sale_detail = newSaleDetail.map((sale_d) => {
+        return {
+          ...sale_d,
+          sale_id: resSale.insertId,
+        };
+      });
 
-      // insert sale detail
-      sql.query(
-        `INSERT INTO sale_detail SET ?`,
-        sale_detail,
-        (errSaleDetail, resSaleDetail) => {
-          if (errSaleDetail) {
-            return sql.rollback(() => {
-              result(null, { error: errSaleDetail });
-            });
+      // Iterate sale_detail object to execute insert query with each element
+      sale_detail.map((sale_d) => {
+        sql.query(
+          `INSERT INTO sale_detail SET ?`,
+          sale_d,
+          (errSaleDetail, resSaleDetail) => {
+            if (errSaleDetail) {
+              return sql.rollback(() => {
+                result(null, { error: errSaleDetail });
+              });
+            }
           }
+        );
+      });
 
-          sql.commit((commitError) => {
-            commitError != null
-              ? result(null, { commitError })
-              : result(null, {
-                  message: 'sale created successful.',
-                  data:
-                    (null,
-                    {
-                      id: resSale.insertId,
-                      ...newSale,
-                      ...newSaleDetail,
-                    }),
-                });
-          });
-        }
-      );
+      sql.commit((commitError) => {
+        commitError != null
+          ? result(null, { commitError })
+          : result(null, {
+              id: resSale.insertId,
+              ...newSale,
+              sales: [...newSaleDetail],
+            });
+      });
     });
   });
 };
