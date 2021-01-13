@@ -6,6 +6,7 @@ const SaleDetail = function (sale_detail) {
   this.tax = sale_detail.tax;
   this.discount = sale_detail.discount;
   this.amount = sale_detail.amount;
+  this.total = sale_detail.total;
   this.sale_id = sale_detail.sale_id;
   this.product_id = sale_detail.product_id;
   this.payment_id = sale_detail.payment_id;
