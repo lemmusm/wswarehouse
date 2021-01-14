@@ -3,7 +3,6 @@ const SaleDetail = require('../models/sale_detail.model');
 const LocalDateTime = require('../helpers/datetime');
 
 /*
-
     Method to create new sale, this method have two parameters request and result.
     Validate if request have content, if not it send status 400 and message.
     Get LocalDateTime helper to use on created_at and update_at.
@@ -69,14 +68,17 @@ exports.createSale = (req, res) => {
         description: 'Error in the database query',
       });
     } else {
-      res.status(200).send({
-        message: 'sale created successful.',
-        data,
-      });
+      res.status(200).send(data);
     }
   });
 };
 
+/*
+    Method to get a sale by id, this method have two parameters request and result.
+    If there is an error of type 'not found', it sends the 404 status with the error message;
+    otherwise the error comes from the database and it send status 500 with the error message.
+    If there are response successful it send status 200 with data.
+*/
 exports.getSaleById = (req, res) => {
   const id = req.params.id;
 
@@ -101,6 +103,25 @@ exports.getSaleById = (req, res) => {
         message: 'Sale found.',
         data,
       });
+    }
+  });
+};
+
+/*
+    Method to get all sales with sold products, this method have two parameters request and result.
+    If there is an error from the database it send status 500 with the error message otherwise
+    are response successful it send status 200 with data.
+*/
+exports.getAllSales = (req, res) => {
+  Sale.getAll((err, data) => {
+    if (err) {
+      res.status(500).send({
+        code: '_001',
+        message: err.message || 'Some error ocurred while retrieving data.',
+        description: 'Error in the database query',
+      });
+    } else {
+      res.status(200).send(data);
     }
   });
 };

@@ -115,6 +115,17 @@ Sale.create = (newSale, newSaleDetail, result) => {
   });
 };
 
+/*
+    Method to get a sale with products sold by id.
+
+    Using transactions run the queries. If there are error on beginTransaction it send.
+    If there are error in some query, it run the rollback to cancel and it send error.
+    Into the last query run commit.
+
+    First with SELECT query get detail of sale FROM sale and with JOIN on sale_detail, product, status, staff and payment,
+    then with other SELECT query FROM sale get total_sold of sale and with the two results is created a objetc
+    with the data.
+*/
 Sale.getById = (id, result) => {
   sql.beginTransaction((transactionError) => {
     if (transactionError) result(null, { error: transactionError });
@@ -126,9 +137,7 @@ Sale.getById = (id, result) => {
         price, tax, discount, amount, total,
         status,
         CONCAT(first_name, " ", last_name) AS staff,
-        type AS payment_type,
-        sale_detail.created_at AS sale_product_created,
-        sale_detail.updated_at AS sale_product_updated
+        type AS payment_type
         FROM sale
         LEFT JOIN sale_detail ON sale_detail.sale_id = sale.id_sale
         LEFT JOIN product ON product.id_product = sale_detail.product_id
@@ -161,14 +170,86 @@ Sale.getById = (id, result) => {
                 ? result(null, {
                     sale_id: id,
                     total_sold: resDates[0].total_sold,
+                    qty_products_sold: res.length,
+                    sold_products: res,
                     created_at: resDates[0].created_at,
                     updated_at: resDates[0].updated_at,
-                    sold_products: res,
                   })
                 : result({ kind: 'not found' }, null);
             });
           }
         );
+      }
+    );
+  });
+};
+
+/*
+    Method to get a sale with sold products.
+
+    Using transactions run the queries. If there are error on beginTransaction it send.
+    If there are error in some query, it run the rollback to cancel and it send error.
+    Into the last query run commit.
+
+    First with SELECT query it get all sales, then with a for loop iterate the results of the query
+    and in each iteration it execute another SELECT query to create array with results of both queries.
+*/
+
+Sale.getAll = (result) => {
+  sql.beginTransaction((transactionError) => {
+    if (transactionError) result(null, { error: transactionError });
+
+    sql.query(
+      `SELECT id_sale, total_sold, created_at, updated_at FROM sale`,
+      (errSale, resSale) => {
+        if (errSale) {
+          return sql.rollback(() => {
+            result(null, { error: errSale });
+          });
+        }
+
+        let sales = [];
+        for (let i = 0; i < resSale.length; i++) {
+          sql.query(
+            `SELECT
+            product.name, product.description, barcode,
+            quantity_sale, price, amount, total,
+            type AS payment_type,
+            CONCAT(first_name, " ", last_name) AS who_sold
+            FROM sale_detail
+            INNER JOIN sale ON sale.id_sale = sale_detail.sale_id
+            LEFT JOIN staff ON staff.id_staff = sale.staff_id
+            INNER JOIN product ON product.id_product = sale_detail.product_id
+            INNER JOIN payment ON payment.id_payment = sale_detail.payment_id
+            WHERE sale_id = ${resSale[i].id_sale}`,
+            (errSaleDetail, resSaleDetail) => {
+              if (errSaleDetail) {
+                return sql.rollback(() => {
+                  result(null, { error: errSaleDetail });
+                });
+              }
+
+              sales.push({
+                id: resSale[i].id_sale,
+                total_sold: resSale[i].total_sold,
+                products_sold: resSaleDetail,
+                created_at: resSale[i].created_at,
+                updated_at: resSale[i].updated_at,
+              });
+
+              if (resSale.length - 1 == i) {
+                sql.commit((commitError) => {
+                  commitError != null
+                    ? result(null, { commitError })
+                    : result(null, {
+                        count: resSale.length,
+                        sales,
+                      });
+                });
+              }
+            }
+          );
+        }
       }
     );
   });
