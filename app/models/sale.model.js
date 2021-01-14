@@ -68,7 +68,9 @@ Sale.create = (newSale, newSaleDetail, result) => {
 
     checkStockAvailable((res) => {
       res.length > 0
-        ? result(null, `The following items are not available: ${res}`)
+        ? result(null, {
+            message: `The following items are not available: ${res}`,
+          })
         : // insert entry
           sql.query(
             'INSERT IGNORE INTO sale SET ?',
@@ -191,27 +193,46 @@ Sale.getById = (id, result) => {
     If there are error in some query, it run the rollback to cancel and it send error.
     Into the last query run commit.
 
-    First with SELECT query it get all sales, then with a for loop iterate the results of the query
-    and in each iteration it execute another SELECT query to create array with results of both queries.
+    Received queryOptions to manage the pagination.
+
+    First with SELECT query to get total rows then with another query SELECT implements LIMIT and OFFSET it get all sales
+    with pagination, then with a for loop iterate the results of the query and in each iteration it execute another
+    SELECT query to create array with results of both queries.
 */
 
-Sale.getAll = (result) => {
+Sale.getAll = (queryOptions, result) => {
   sql.beginTransaction((transactionError) => {
     if (transactionError) result(null, { error: transactionError });
 
     sql.query(
-      `SELECT id_sale, total_sold, created_at, updated_at FROM sale`,
-      (errSale, resSale) => {
-        if (errSale) {
+      `SELECT COUNT(*) AS items  FROM sale`,
+      (errCountSale, resCountSale) => {
+        if (errCountSale) {
           return sql.rollback(() => {
-            result(null, { error: errSale });
+            result(null, { error: errCountSale });
           });
         }
+        // get count rows in sales
+        const countItemsSales = resCountSale[0].items;
+        // get total pages
+        const total_pages = Math.ceil(countItemsSales / queryOptions.limit);
+        console.log(total_pages);
 
-        let sales = [];
-        for (let i = 0; i < resSale.length; i++) {
-          sql.query(
-            `SELECT
+        sql.query(
+          `SELECT id_sale, total_sold, created_at, updated_at
+        FROM sale
+        LIMIT ${queryOptions.limit} OFFSET ${queryOptions.offset}`,
+          (errSale, resSale) => {
+            if (errSale) {
+              return sql.rollback(() => {
+                result(null, { error: errSale });
+              });
+            }
+
+            let sales = [];
+            for (let i = 0; i < resSale.length; i++) {
+              sql.query(
+                `SELECT
             product.name, product.description, barcode,
             quantity_sale, price, amount, total,
             type AS payment_type,
@@ -222,34 +243,39 @@ Sale.getAll = (result) => {
             INNER JOIN product ON product.id_product = sale_detail.product_id
             INNER JOIN payment ON payment.id_payment = sale_detail.payment_id
             WHERE sale_id = ${resSale[i].id_sale}`,
-            (errSaleDetail, resSaleDetail) => {
-              if (errSaleDetail) {
-                return sql.rollback(() => {
-                  result(null, { error: errSaleDetail });
-                });
-              }
+                (errSaleDetail, resSaleDetail) => {
+                  if (errSaleDetail) {
+                    return sql.rollback(() => {
+                      result(null, { error: errSaleDetail });
+                    });
+                  }
 
-              sales.push({
-                id: resSale[i].id_sale,
-                total_sold: resSale[i].total_sold,
-                products_sold: resSaleDetail,
-                created_at: resSale[i].created_at,
-                updated_at: resSale[i].updated_at,
-              });
+                  sales.push({
+                    id: resSale[i].id_sale,
+                    total_sold: resSale[i].total_sold,
+                    products_sold: resSaleDetail,
+                    created_at: resSale[i].created_at,
+                    updated_at: resSale[i].updated_at,
+                  });
 
-              if (resSale.length - 1 == i) {
-                sql.commit((commitError) => {
-                  commitError != null
-                    ? result(null, { commitError })
-                    : result(null, {
-                        count: resSale.length,
-                        sales,
-                      });
-                });
-              }
+                  if (resSale.length - 1 == i) {
+                    sql.commit((commitError) => {
+                      commitError != null
+                        ? result(null, { commitError })
+                        : result(null, {
+                            limit: queryOptions.limit,
+                            page: queryOptions.page,
+                            total_results: countItemsSales,
+                            total_pages,
+                            sales,
+                          });
+                    });
+                  }
+                }
+              );
             }
-          );
-        }
+          }
+        );
       }
     );
   });

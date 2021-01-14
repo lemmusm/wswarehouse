@@ -109,11 +109,23 @@ exports.getSaleById = (req, res) => {
 
 /*
     Method to get all sales with sold products, this method have two parameters request and result.
+    Send to model queryOptions to manage pagination.
     If there is an error from the database it send status 500 with the error message otherwise
     are response successful it send status 200 with data.
 */
 exports.getAllSales = (req, res) => {
-  Sale.getAll((err, data) => {
+  // pagination options
+  const limit = req.body.limit;
+  const page = req.query.page;
+  const offset = (page - 1) * limit;
+
+  const queryOptions = {
+    limit,
+    page,
+    offset,
+  };
+
+  Sale.getAll(queryOptions, (err, data) => {
     if (err) {
       res.status(500).send({
         code: '_001',
